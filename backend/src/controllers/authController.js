@@ -27,17 +27,10 @@ export async function csrfHandler(req, res) {
 
 export async function registerHandler(req, res, next) {
   try {
-    if (!config.allowPublicStudentRegistration) {
-      throw new PermissionError('O cadastro é gerenciado pela escola. Solicite acesso à equipe responsável.');
-    }
+    const { username, email, first_name = '', last_name = '', password, password_confirm, role = 'student' } = req.body;
 
-    const { username, email, first_name = '', last_name = '', password, password_confirm, role } = req.body;
-
-    if (role !== undefined) {
-      throw new ValidationError('Os dados enviados são inválidos.', {
-        role: ['O perfil é atribuído pela plataforma e não pode ser escolhido no cadastro.'],
-      });
-    }
+    const allowedRoles = ['student', 'teacher'];
+    const assignedRole = allowedRoles.includes(role) ? role : 'student';
 
     const errors = {};
 
@@ -89,9 +82,9 @@ export async function registerHandler(req, res, next) {
       `INSERT INTO accounts_user (
         username, email, first_name, last_name, password, role,
         is_superuser, is_staff, is_active, date_joined
-      ) VALUES ($1, $2, $3, $4, $5, 'student', false, false, true, $6)
+      ) VALUES ($1, $2, $3, $4, $5, $6, false, false, true, $7)
       RETURNING id, username, email, first_name, last_name, role`,
-      [username, normalizedEmail, first_name, last_name, hashedPassword, now]
+      [username, normalizedEmail, first_name, last_name, hashedPassword, assignedRole, now]
     );
 
     const user = result.rows[0];

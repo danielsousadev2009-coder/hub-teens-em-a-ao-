@@ -27,6 +27,7 @@ export interface RegisterPayload {
   last_name?: string
   password: string
   password_confirm: string
+  role?: AccountRole
 }
 
 interface AuthContextValue {

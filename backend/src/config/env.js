@@ -41,7 +41,7 @@ export const config = {
 
   // Registration
   allowPublicStudentRegistration:
-    (process.env.ALLOW_PUBLIC_STUDENT_REGISTRATION || 'false').toLowerCase() === 'true',
+    (process.env.ALLOW_PUBLIC_STUDENT_REGISTRATION || 'true').toLowerCase() === 'true',
 
   // CORS & CSRF
   corsAllowedOrigins: (

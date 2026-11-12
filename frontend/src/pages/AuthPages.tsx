@@ -137,7 +137,7 @@ export function LoginPage() {
           Esqueci minha senha
         </Link>
         <Link className="font-semibold text-indigo-700 hover:underline" to="/cadastro">
-          Criar conta de aluno
+          Criar uma conta
         </Link>
       </div>
     </AuthCard>
@@ -163,6 +163,7 @@ export function RegisterPage() {
     const lastName = String(data.get('last_name') || '').trim()
     const password = String(data.get('password') || '')
     const passwordConfirm = String(data.get('password_confirm') || '')
+    const selectedRole = String(data.get('role') || 'student') as AccountRole
 
     if (password !== passwordConfirm) {
       setError('As senhas não correspondem.')
@@ -178,6 +179,7 @@ export function RegisterPage() {
         last_name: lastName,
         password,
         password_confirm: passwordConfirm,
+        role: selectedRole === 'teacher' ? 'teacher' : 'student',
       })
       navigate(roleHomePath(account.role), { replace: true })
     } catch (submitError) {
@@ -189,10 +191,22 @@ export function RegisterPage() {
 
   return (
     <AuthCard
-      title="Cadastro de Aluno"
-      description="Crie sua conta para participar de ideias, desafios, equipes e projetos do Hub Teens."
+      title="Criar Conta no Hub Teens"
+      description="Acesso aberto para estudantes e educadores. Crie sua conta e comece agora mesmo."
     >
       <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
+        <label className="block text-sm font-medium text-slate-700" htmlFor="role">
+          Eu sou
+          <select
+            className="mt-1.5 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+            defaultValue="student"
+            id="role"
+            name="role"
+          >
+            <option value="student">Aluno(a) — Explorar ideias, desafios e maker</option>
+            <option value="teacher">Professor(a) — Criar desafios e moderar conteúdos</option>
+          </select>
+        </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormInput label="Nome" name="first_name" autoComplete="given-name" maxLength={150} />
           <FormInput label="Sobrenome" name="last_name" autoComplete="family-name" required={false} maxLength={150} />
