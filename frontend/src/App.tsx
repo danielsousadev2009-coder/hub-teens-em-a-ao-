@@ -27,7 +27,14 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<AppLayout />}>
-            <Route index element={<DashboardPage />} />
+            <Route
+              index
+              element={
+                <PrivateRoute>
+                  <DashboardPage />
+                </PrivateRoute>
+              }
+            />
             <Route path="login" element={<LoginPage />} />
             <Route path="cadastro" element={<RegisterPage />} />
             <Route path="recuperar-senha" element={<ForgotPasswordPage />} />

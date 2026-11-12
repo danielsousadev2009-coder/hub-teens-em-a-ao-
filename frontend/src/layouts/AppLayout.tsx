@@ -40,7 +40,7 @@ export function AppLayout() {
     setLogoutError(null)
     try {
       await logout()
-      navigate('/', { replace: true })
+      navigate('/login', { replace: true })
     } catch (error) {
       setLogoutError(error instanceof Error ? error.message : 'Não foi possível encerrar a sessão.')
     }
@@ -92,7 +92,7 @@ export function AppLayout() {
                   className="rounded-lg bg-white px-3 py-1.5 font-semibold text-indigo-700 hover:bg-indigo-50"
                   to="/cadastro"
                 >
-                  Acesso escolar
+                  Criar conta
                 </Link>
               </>
             )}

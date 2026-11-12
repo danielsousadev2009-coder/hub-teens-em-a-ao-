@@ -604,10 +604,53 @@ function ResourceCard({
         <TeamInviteForm teamId={row.id} onInvite={onAction} />
       )}
 
+      {module === 'challenges' && canModerate && (
+        <ChallengeSubmissionsReview challengeId={row.id} onAction={onAction} />
+      )}
+
+      {module === 'fairs' && canModerate && (
+        <FairEntriesReview fairId={row.id} onAction={onAction} />
+      )}
+
       {module === 'youth-media' && canModerate && status === 'pending' && (
         <div className="mt-4 flex gap-2 border-t border-slate-100 pt-4">
           <button className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700" onClick={() => void onAction(`/api/youth-media/${row.id}/moderate/`, { status: 'published' })} type="button">Aprovar publicação</button>
           <button className="rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50" onClick={() => void onAction(`/api/youth-media/${row.id}/moderate/`, { status: 'rejected' })} type="button">Não aprovar</button>
+        </div>
+      )}
+
+      {module === 'ideas' && canModerate && (
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Moderação:
+          </span>
+          {status !== 'approved' && (
+            <button
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+              onClick={() => void onAction(`/api/ideas/${row.id}/moderate/`, { status: 'approved' })}
+              type="button"
+            >
+              Aprovar ideia
+            </button>
+          )}
+          {status !== 'needs_revision' && (
+            <button
+              className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+              onClick={() => void onAction(`/api/ideas/${row.id}/moderate/`, { status: 'needs_revision' })}
+              type="button"
+            >
+              Pedir revisão
+            </button>
+          )}
+          {status !== 'archived' && (
+            <button
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={() => void onAction(`/api/ideas/${row.id}/moderate/`, { status: 'archived' })}
+              type="button"
+            >
+              Arquivar
+            </button>
+          )}
         </div>
       )}
       {typeof row.url === 'string' && row.url.length > 0 && (
@@ -619,6 +662,253 @@ function ResourceCard({
           ideaId={row.id}
           initialCount={Number(row.comments_count) || 0}
         />
+      )}
+    </div>
+  )
+}
+
+function ChallengeSubmissionsReview({
+  challengeId,
+  onAction,
+}: {
+  challengeId: number
+  onAction: (path: string, body?: Record<string, unknown>) => Promise<boolean>
+}) {
+  const [submissions, setSubmissions] = useState<DataRow[]>([])
+  const [isOpen, setIsOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function loadSubmissions() {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const payload = await apiRequest<unknown>('/api/challenge-submissions/')
+      const all = extractRows(payload)
+      setSubmissions(all.filter((item) => item.challenge === challengeId))
+    } catch (err) {
+      setError(apiErrorMessage(err))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  function handleToggle() {
+    if (!isOpen) {
+      void loadSubmissions()
+    }
+    setIsOpen(!isOpen)
+  }
+
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-3">
+      <button
+        className="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 hover:underline"
+        onClick={handleToggle}
+        type="button"
+      >
+        <span>{isOpen ? 'Ocultar entregas dos alunos' : 'Avaliar entregas dos alunos neste desafio'}</span>
+      </button>
+
+      {isOpen && (
+        <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Painel do Professor — Entregas dos Alunos
+          </p>
+          {isLoading && (
+            <p className="text-xs text-slate-500">Carregando entregas recebidas…</p>
+          )}
+          {error && <p className="text-xs text-rose-700">{error}</p>}
+          {!isLoading && !error && submissions.length === 0 && (
+            <p className="text-xs text-slate-500">Nenhum aluno enviou participação para este desafio ainda.</p>
+          )}
+          {!isLoading &&
+            submissions.map((sub) => {
+              const subStatus = String(sub.status || '')
+              const isPending = subStatus === 'submitted' || subStatus === 'needs_revision'
+              return (
+                <div
+                  className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs"
+                  key={sub.id}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-800">
+                      Aluno: {String(sub.student_username || 'Estudante')}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        subStatus === 'accepted'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : subStatus === 'needs_revision'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-indigo-100 text-indigo-800'
+                      }`}
+                    >
+                      {subStatus === 'accepted'
+                        ? 'Aprovada (+10 pts)'
+                        : subStatus === 'needs_revision'
+                        ? 'Revisão solicitada'
+                        : 'Aguardando avaliação'}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 whitespace-pre-wrap text-xs text-slate-700">
+                    {String(sub.response || '')}
+                  </p>
+                  {isPending && (
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      <button
+                        className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                        onClick={async () => {
+                          const ok = await onAction(`/api/challenge-submissions/${sub.id}/review/`, {
+                            status: 'accepted',
+                          })
+                          if (ok) void loadSubmissions()
+                        }}
+                        type="button"
+                      >
+                        Aprovar entrega (+10 pts)
+                      </button>
+                      <button
+                        className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                        onClick={async () => {
+                          const ok = await onAction(`/api/challenge-submissions/${sub.id}/review/`, {
+                            status: 'needs_revision',
+                          })
+                          if (ok) void loadSubmissions()
+                        }}
+                        type="button"
+                      >
+                        Pedir revisão
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FairEntriesReview({
+  fairId,
+  onAction,
+}: {
+  fairId: number
+  onAction: (path: string, body?: Record<string, unknown>) => Promise<boolean>
+}) {
+  const [entries, setEntries] = useState<DataRow[]>([])
+  const [isOpen, setIsOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function loadEntries() {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const payload = await apiRequest<unknown>('/api/fair-entries/')
+      const all = extractRows(payload)
+      setEntries(all.filter((item) => item.fair === fairId))
+    } catch (err) {
+      setError(apiErrorMessage(err))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  function handleToggle() {
+    if (!isOpen) {
+      void loadEntries()
+    }
+    setIsOpen(!isOpen)
+  }
+
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-3">
+      <button
+        className="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 hover:underline"
+        onClick={handleToggle}
+        type="button"
+      >
+        <span>{isOpen ? 'Ocultar projetos inscritos' : 'Avaliar projetos inscritos nesta feira'}</span>
+      </button>
+
+      {isOpen && (
+        <div className="mt-3 space-y-3 rounded-xl bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Painel do Professor — Inscrições de Projetos
+          </p>
+          {isLoading && (
+            <p className="text-xs text-slate-500">Carregando inscrições…</p>
+          )}
+          {error && <p className="text-xs text-rose-700">{error}</p>}
+          {!isLoading && !error && entries.length === 0 && (
+            <p className="text-xs text-slate-500">Nenhum projeto inscrito nesta feira até o momento.</p>
+          )}
+          {!isLoading &&
+            entries.map((entry) => {
+              const entryStatus = String(entry.status || '')
+              return (
+                <div
+                  className="rounded-lg border border-slate-200 bg-white p-3 shadow-xs"
+                  key={entry.id}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-800">
+                      Projeto: {String(entry.project_title || `Projeto #${entry.project}`)}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        entryStatus === 'selected'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : entryStatus === 'not_selected'
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-indigo-100 text-indigo-800'
+                      }`}
+                    >
+                      {entryStatus === 'selected'
+                        ? 'Selecionado para a feira'
+                        : entryStatus === 'not_selected'
+                        ? 'Não selecionado'
+                        : 'Aguardando avaliação'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Inscrito por: {String(entry.submitter_username || 'Aluno')}
+                  </p>
+                  {entryStatus === 'submitted' && (
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      <button
+                        className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                        onClick={async () => {
+                          const ok = await onAction(`/api/fair-entries/${entry.id}/review/`, {
+                            status: 'selected',
+                          })
+                          if (ok) void loadEntries()
+                        }}
+                        type="button"
+                      >
+                        Selecionar para a feira
+                      </button>
+                      <button
+                        className="rounded-md border border-rose-300 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                        onClick={async () => {
+                          const ok = await onAction(`/api/fair-entries/${entry.id}/review/`, {
+                            status: 'not_selected',
+                          })
+                          if (ok) void loadEntries()
+                        }}
+                        type="button"
+                      >
+                        Não selecionar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+        </div>
       )}
     </div>
   )

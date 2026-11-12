@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth, roleHomePath, type AccountRole } from '../contexts/AuthContext'
 import { ApiError, apiRequest } from '../services/api'
 
@@ -100,10 +100,14 @@ function errorText(error: unknown): string {
 export function LoginPage() {
   const { user, login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  if (user) return <Navigate to={roleHomePath(user.role)} replace />
+  const stateFrom = (location.state as { from?: string } | null)?.from
+  const safeRedirect = stateFrom && stateFrom.startsWith('/') && !stateFrom.startsWith('//') ? stateFrom : null
+
+  if (user) return <Navigate to={safeRedirect ?? roleHomePath(user.role)} replace />
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -112,7 +116,7 @@ export function LoginPage() {
     const data = new FormData(event.currentTarget)
     try {
       const account = await login(String(data.get('identifier')), String(data.get('password')))
-      navigate(roleHomePath(account.role), { replace: true })
+      navigate(safeRedirect ?? roleHomePath(account.role), { replace: true })
     } catch (submitError) {
       setError(errorText(submitError))
     } finally {
@@ -133,7 +137,7 @@ export function LoginPage() {
           Esqueci minha senha
         </Link>
         <Link className="font-semibold text-indigo-700 hover:underline" to="/cadastro">
-          Como obter acesso
+          Criar conta de aluno
         </Link>
       </div>
     </AuthCard>
@@ -141,17 +145,89 @@ export function LoginPage() {
 }
 
 export function RegisterPage() {
+  const { user, register } = useAuth()
+  const navigate = useNavigate()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (user) return <Navigate to={roleHomePath(user.role)} replace />
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true)
+    setError(null)
+    const data = new FormData(event.currentTarget)
+    const username = String(data.get('username') || '').trim()
+    const email = String(data.get('email') || '').trim()
+    const firstName = String(data.get('first_name') || '').trim()
+    const lastName = String(data.get('last_name') || '').trim()
+    const password = String(data.get('password') || '')
+    const passwordConfirm = String(data.get('password_confirm') || '')
+
+    if (password !== passwordConfirm) {
+      setError('As senhas não correspondem.')
+      setBusy(false)
+      return
+    }
+
+    try {
+      const account = await register({
+        username,
+        email,
+        first_name: firstName,
+        last_name: lastName,
+        password,
+        password_confirm: passwordConfirm,
+      })
+      navigate(roleHomePath(account.role), { replace: true })
+    } catch (submitError) {
+      setError(errorText(submitError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <AuthCard
-      title="Acesso de aluno"
-      description="As contas do piloto são criadas pela escola para manter o acesso restrito aos participantes autorizados."
+      title="Cadastro de Aluno"
+      description="Crie sua conta para participar de ideias, desafios, equipes e projetos do Hub Teens."
     >
-      <p className="leading-6 text-slate-700" role="status">
-        Peça à coordenação ou ao professor responsável as instruções de acesso. Não compartilhe sua senha.
-      </p>
-      <Link className="mt-5 inline-block text-sm font-semibold text-indigo-700 hover:underline" to="/login">
-        Já tem acesso? Entrar
-      </Link>
+      <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormInput label="Nome" name="first_name" autoComplete="given-name" maxLength={150} />
+          <FormInput label="Sobrenome" name="last_name" autoComplete="family-name" required={false} maxLength={150} />
+        </div>
+        <FormInput
+          label="Nome de usuário"
+          name="username"
+          autoComplete="username"
+          maxLength={30}
+        />
+        <p className="-mt-2 text-xs text-slate-500">
+          De 3 a 30 caracteres (letras, números, pontos, hífens ou sublinhados).
+        </p>
+        <FormInput label="E-mail" name="email" type="email" autoComplete="email" maxLength={254} />
+        <FormInput
+          label="Senha"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+        />
+        <FormInput
+          label="Confirmar senha"
+          name="password_confirm"
+          type="password"
+          autoComplete="new-password"
+        />
+        <ErrorMessage>{error}</ErrorMessage>
+        <SubmitButton busy={busy}>Criar minha conta</SubmitButton>
+      </form>
+      <div className="mt-5 text-center text-sm">
+        <span className="text-slate-600">Já tem uma conta? </span>
+        <Link className="font-semibold text-indigo-700 hover:underline" to="/login">
+          Fazer login
+        </Link>
+      </div>
     </AuthCard>
   )
 }
@@ -271,14 +347,149 @@ export function RoleHomePage() {
       <p className="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-indigo-600">
         Área da conta
       </p>
-      <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-        Olá, {user.first_name || user.username}!
-      </h1>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+          Olá, {user.first_name || user.username}!
+        </h1>
+        {user.role === 'teacher' && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">
+            ✓ Professor Verificado
+          </span>
+        )}
+        {user.role === 'administrator' && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">
+            ★ Administrador
+          </span>
+        )}
+      </div>
+
       <p className="mt-4 leading-7 text-slate-600">
-        Sessão autenticada como {roleLabels[user.role]}. Esta tela exibe os dados da conta; ferramentas de gestão
-        para professores e administradores ainda não estão disponíveis neste painel.
+        {user.role === 'teacher'
+          ? 'Você possui perfil de professor(a) verificado(a). Abaixo estão suas ferramentas de gestão pedagógica, moderação e avaliação de projetos.'
+          : user.role === 'administrator'
+          ? 'Você possui perfil de administrador. Gerencie eventos, desafios, moderação de conteúdos e o ecossistema escolar.'
+          : 'Sessão autenticada como aluno(a). Participe dos desafios, submeta projetos no Espaço Maker e colabore com ideias!'}
       </p>
-      <dl className="mt-7 grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:grid-cols-2">
+
+      {user.role !== 'student' ? (
+        <section className="mt-7">
+          <h2 className="text-base font-bold text-slate-900">
+            Funções exclusivas do Professor
+          </h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Ações e recursos restritos à equipe pedagógica e moderadores.
+          </p>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <Link
+              className="group rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-indigo-300 hover:shadow-md"
+              to="/desafios"
+            >
+              <p className="font-semibold text-slate-900 group-hover:text-indigo-600">
+                🎯 Criar & Avaliar Desafios
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                Publique novos desafios escolares e avalie as participações dos alunos concedendo pontos.
+              </p>
+            </Link>
+
+            <Link
+              className="group rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-indigo-300 hover:shadow-md"
+              to="/feira"
+            >
+              <p className="font-semibold text-slate-900 group-hover:text-indigo-600">
+                🎪 Feiras & Avaliação de Projetos
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                Organize mostras científicas e selecione quais projetos dos alunos participarão da feira.
+              </p>
+            </Link>
+
+            <Link
+              className="group rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-indigo-300 hover:shadow-md"
+              to="/agenda"
+            >
+              <p className="font-semibold text-slate-900 group-hover:text-indigo-600">
+                📅 Agenda de Eventos
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                Agende eventos, palestras e prazos oficiais para os estudantes.
+              </p>
+            </Link>
+
+            <Link
+              className="group rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-indigo-300 hover:shadow-md"
+              to="/ideias"
+            >
+              <p className="font-semibold text-slate-900 group-hover:text-indigo-600">
+                💡 Moderação do Banco de Ideias
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                Aprove ideias enviadas pelos estudantes ou requisite revisões e ajustes.
+              </p>
+            </Link>
+
+            <Link
+              className="group rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-indigo-300 hover:shadow-md"
+              to="/midia-jovem"
+            >
+              <p className="font-semibold text-slate-900 group-hover:text-indigo-600">
+                🎙️ Moderação de Mídia Jovem
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                Revise artigos e matérias jornalísticas escritas por alunos antes da publicação.
+              </p>
+            </Link>
+
+            <Link
+              className="group rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-indigo-300 hover:shadow-md"
+              to="/ranking"
+            >
+              <p className="font-semibold text-slate-900 group-hover:text-indigo-600">
+                🏆 Ranking & Desempenho dos Alunos
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                Acompanhe o ranking completo de pontuação e engajamento dos estudantes.
+              </p>
+            </Link>
+          </div>
+        </section>
+      ) : (
+        <section className="mt-7">
+          <h2 className="text-base font-bold text-slate-900">Suas Atividades no Hub</h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Link
+              className="group rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-indigo-300 hover:shadow-md"
+              to="/ideias"
+            >
+              <p className="font-semibold text-slate-900 group-hover:text-indigo-600">💡 Compartilhar Ideia</p>
+              <p className="mt-1 text-xs text-slate-600">Publique suas propostas associadas aos ODS da ONU.</p>
+            </Link>
+            <Link
+              className="group rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-indigo-300 hover:shadow-md"
+              to="/desafios"
+            >
+              <p className="font-semibold text-slate-900 group-hover:text-indigo-600">🎯 Participar de Desafios</p>
+              <p className="mt-1 text-xs text-slate-600">Responda aos desafios dos professores e ganhe pontos.</p>
+            </Link>
+            <Link
+              className="group rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-indigo-300 hover:shadow-md"
+              to="/maker"
+            >
+              <p className="font-semibold text-slate-900 group-hover:text-indigo-600">🛠️ Espaço Maker</p>
+              <p className="mt-1 text-xs text-slate-600">Documente seus projetos práticos e protótipos.</p>
+            </Link>
+            <Link
+              className="group rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-indigo-300 hover:shadow-md"
+              to="/ranking"
+            >
+              <p className="font-semibold text-slate-900 group-hover:text-indigo-600">🏅 Minha Pontuação</p>
+              <p className="mt-1 text-xs text-slate-600">Consulte os pontos acumulados pelas suas participações.</p>
+            </Link>
+          </div>
+        </section>
+      )}
+      <dl className="mt-7 grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:grid-cols-3">
         <div>
           <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Usuário</dt>
           <dd className="mt-1 font-medium text-slate-900">{user.username}</dd>
@@ -286,6 +497,10 @@ export function RoleHomePage() {
         <div>
           <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">E-mail</dt>
           <dd className="mt-1 break-all font-medium text-slate-900">{user.email}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Perfil</dt>
+          <dd className="mt-1 font-medium text-slate-900">{roleLabels[user.role]}</dd>
         </div>
       </dl>
       {error && <ErrorMessage>{error}</ErrorMessage>}

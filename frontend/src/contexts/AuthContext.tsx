@@ -20,11 +20,21 @@ export interface Account {
   role: AccountRole
 }
 
+export interface RegisterPayload {
+  username: string
+  email: string
+  first_name?: string
+  last_name?: string
+  password: string
+  password_confirm: string
+}
+
 interface AuthContextValue {
   user: Account | null
   isLoading: boolean
   authError: string | null
   login: (identifier: string, password: string) => Promise<Account>
+  register: (payload: RegisterPayload) => Promise<Account>
   logout: () => Promise<void>
   refreshProfile: () => Promise<Account>
 }
@@ -103,6 +113,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return response.user
   }, [])
 
+  const register = useCallback(async (payload: RegisterPayload) => {
+    const response = await apiRequest<AuthResponse>('/api/auth/register/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    setUser(response.user)
+    setAuthError(null)
+    return response.user
+  }, [])
+
   const logout = useCallback(async () => {
     await apiRequest<null>('/api/auth/logout/', {
       method: 'POST',
@@ -113,8 +133,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, isLoading, authError, login, logout, refreshProfile }),
-    [user, isLoading, authError, login, logout, refreshProfile],
+    () => ({ user, isLoading, authError, login, register, logout, refreshProfile }),
+    [user, isLoading, authError, login, register, logout, refreshProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
