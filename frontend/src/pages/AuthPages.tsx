@@ -192,8 +192,11 @@ export function RegisterPage() {
   return (
     <AuthCard
       title="Criar Conta no Hub Teens"
-      description="Acesso aberto para estudantes e educadores. Crie sua conta e comece agora mesmo."
+      description="Acesso 100% liberado para todos os estudantes e professores, sem necessidade de aprovação ou autorização prévia da equipe escolar."
     >
+      <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-800">
+        ✓ Cadastro livre e imediato: crie sua conta e comece a usar a plataforma agora mesmo.
+      </div>
       <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
         <label className="block text-sm font-medium text-slate-700" htmlFor="role">
           Eu sou

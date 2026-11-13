@@ -137,14 +137,22 @@ export function DashboardPage() {
       {!user && !isAuthLoading && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-indigo-50 p-4">
           <p className="text-sm leading-6 text-indigo-950">
-            O acesso ao piloto é fornecido pela escola. Entre com sua conta para participar.
+            A plataforma Hub Teens está aberta para todos. Crie sua conta ou entre para participar.
           </p>
-          <Link
-            className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-            to="/login"
-          >
-            Entrar
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+              to="/login"
+            >
+              Entrar
+            </Link>
+            <Link
+              className="shrink-0 rounded-lg border border-indigo-600 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
+              to="/cadastro"
+            >
+              Cadastre-se
+            </Link>
+          </div>
         </div>
       )}
 
