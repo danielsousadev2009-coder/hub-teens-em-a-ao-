@@ -47,7 +47,7 @@ export async function listArticles(req, res, next) {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const countRes = await query(`SELECT COUNT(*)::int AS count FROM media_youtharticle m ${whereClause}`, params);
+    const countRes = await query(`SELECT COUNT(*)::int AS count FROM youth_media_youtharticle m ${whereClause}`, params);
     const total = countRes.rows[0].count;
 
     let orderClause = 'ORDER BY m.created_at DESC';
@@ -59,7 +59,7 @@ export async function listArticles(req, res, next) {
     const listQuery = `
       SELECT m.id, m.title, m.body, m.category, m.image, m.status, m.created_at, m.moderated_at,
              m.author_id AS author, u.username AS author_username
-      FROM media_youtharticle m
+      FROM youth_media_youtharticle m
       JOIN accounts_user u ON m.author_id = u.id
       ${whereClause}
       ${orderClause}
@@ -106,7 +106,7 @@ export async function createArticle(req, res, next) {
 
     const now = new Date();
     const insertRes = await query(
-      `INSERT INTO media_youtharticle (title, body, category, image, status, author_id, created_at)
+      `INSERT INTO youth_media_youtharticle (title, body, category, image, status, author_id, created_at)
        VALUES ($1, $2, $3, $4, 'pending', $5, $6)
        RETURNING id, title, body, category, image, status, author_id AS author, created_at, moderated_at`,
       [title.trim(), body.trim(), String(category || '').trim(), imagePath, req.user.id, now]
@@ -127,7 +127,7 @@ export async function getArticle(req, res, next) {
     const result = await query(
       `SELECT m.id, m.title, m.body, m.category, m.image, m.status, m.created_at, m.moderated_at,
               m.author_id AS author, u.username AS author_username
-       FROM media_youtharticle m
+       FROM youth_media_youtharticle m
        JOIN accounts_user u ON m.author_id = u.id
        WHERE m.id = $1`,
       [id]
@@ -150,7 +150,7 @@ export async function getArticle(req, res, next) {
 export async function updateArticle(req, res, next) {
   try {
     const id = parseInt(req.params.id, 10);
-    const existing = await query('SELECT id, author_id, status FROM media_youtharticle WHERE id = $1', [id]);
+    const existing = await query('SELECT id, author_id, status FROM youth_media_youtharticle WHERE id = $1', [id]);
     const article = existing.rows[0];
     if (!article) throw new NotFoundError('Artigo não encontrado.');
 
@@ -183,13 +183,13 @@ export async function updateArticle(req, res, next) {
 
     if (updates.length > 0) {
       values.push(id);
-      await query(`UPDATE media_youtharticle SET ${updates.join(', ')} WHERE id = $${idx}`, values);
+      await query(`UPDATE youth_media_youtharticle SET ${updates.join(', ')} WHERE id = $${idx}`, values);
     }
 
     const updatedRes = await query(
       `SELECT m.id, m.title, m.body, m.category, m.image, m.status, m.created_at, m.moderated_at,
               m.author_id AS author, u.username AS author_username
-       FROM media_youtharticle m
+       FROM youth_media_youtharticle m
        JOIN accounts_user u ON m.author_id = u.id
        WHERE m.id = $1`,
       [id]
@@ -205,7 +205,7 @@ export async function updateArticle(req, res, next) {
 export async function deleteArticle(req, res, next) {
   try {
     const id = parseInt(req.params.id, 10);
-    const existing = await query('SELECT id, author_id FROM media_youtharticle WHERE id = $1', [id]);
+    const existing = await query('SELECT id, author_id FROM youth_media_youtharticle WHERE id = $1', [id]);
     const article = existing.rows[0];
     if (!article) throw new NotFoundError('Artigo não encontrado.');
 
@@ -213,7 +213,7 @@ export async function deleteArticle(req, res, next) {
       throw new PermissionError('Você só pode remover seu próprio conteúdo.');
     }
 
-    await query('DELETE FROM media_youtharticle WHERE id = $1', [id]);
+    await query('DELETE FROM youth_media_youtharticle WHERE id = $1', [id]);
     res.status(204).end();
   } catch (err) {
     next(err);
@@ -223,7 +223,7 @@ export async function deleteArticle(req, res, next) {
 export async function moderateArticle(req, res, next) {
   try {
     const id = parseInt(req.params.id, 10);
-    const existing = await query('SELECT id, author_id FROM media_youtharticle WHERE id = $1', [id]);
+    const existing = await query('SELECT id, author_id FROM youth_media_youtharticle WHERE id = $1', [id]);
     const article = existing.rows[0];
     if (!article) throw new NotFoundError('Artigo não encontrado.');
 
@@ -234,7 +234,7 @@ export async function moderateArticle(req, res, next) {
 
     const now = new Date();
     const updated = await query(
-      `UPDATE media_youtharticle
+      `UPDATE youth_media_youtharticle
        SET status = $1, moderated_at = $2
        WHERE id = $3
        RETURNING id, title, body, category, image, status, author_id AS author, created_at, moderated_at`,

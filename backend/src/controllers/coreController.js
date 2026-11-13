@@ -35,7 +35,7 @@ export async function dashboardHandler(req, res, next) {
       query('SELECT COUNT(*)::int AS count FROM challenges_challengesubmission WHERE student_id = $1', [userId]),
       query("SELECT COUNT(*)::int AS count FROM challenges_challengesubmission WHERE student_id = $1 AND status = 'accepted'", [userId]),
       query("SELECT COUNT(*)::int AS count FROM teams_teammembership WHERE user_id = $1 AND status = 'active'", [userId]),
-      query("SELECT COUNT(*)::int AS count FROM media_youtharticle WHERE author_id = $1 AND status = 'pending'", [userId]),
+      query("SELECT COUNT(*)::int AS count FROM youth_media_youtharticle WHERE author_id = $1 AND status = 'pending'", [userId]),
       query('SELECT COUNT(*)::int AS count FROM notifications_notification WHERE recipient_id = $1 AND read_at IS NULL', [userId]),
       query('SELECT COALESCE(SUM(points), 0)::int AS total FROM ranking_pointaward WHERE user_id = $1', [userId]),
     ]);
