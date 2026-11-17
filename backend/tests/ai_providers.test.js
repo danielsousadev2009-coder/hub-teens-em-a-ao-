@@ -52,3 +52,4 @@ test('AI Providers: availableProviders returns boolean dictionary for all provid
   assert.equal(typeof providers.groq, 'boolean');
   assert.equal(typeof providers.ollama, 'boolean');
 });
+

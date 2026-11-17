@@ -65,3 +65,4 @@ export function maskSecret(secret) {
   if (trimmed.length <= 8) return '****';
   return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
 }
+
