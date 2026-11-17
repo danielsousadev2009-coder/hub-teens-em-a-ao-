@@ -165,6 +165,24 @@ export function RegisterPage() {
     const passwordConfirm = String(data.get('password_confirm') || '')
     const selectedRole = String(data.get('role') || 'student') as AccountRole
 
+    if (username.length < 3) {
+      setError('O nome de usuário deve conter pelo menos 3 caracteres.')
+      setBusy(false)
+      return
+    }
+
+    if (/\s/.test(username)) {
+      setError('O nome de usuário não pode conter espaços. Use letras, números, hífens ou sublinhados.')
+      setBusy(false)
+      return
+    }
+
+    if (password.length < 8) {
+      setError('A senha deve conter pelo menos 8 caracteres.')
+      setBusy(false)
+      return
+    }
+
     if (password !== passwordConfirm) {
       setError('As senhas não correspondem.')
       setBusy(false)

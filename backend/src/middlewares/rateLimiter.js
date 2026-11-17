@@ -52,12 +52,12 @@ class MemoryRateLimiter {
 
 // DRF match:
 export const throttles = {
-  authLogin: new MemoryRateLimiter(5, 60 * 1000).middleware('auth_login'),
+  authLogin: new MemoryRateLimiter(10, 60 * 1000).middleware('auth_login'),
   authLogout: new MemoryRateLimiter(20, 60 * 1000).middleware('auth_logout'),
-  authRegister: new MemoryRateLimiter(5, 60 * 60 * 1000).middleware('auth_register'),
-  authPasswordReset: new MemoryRateLimiter(3, 60 * 60 * 1000).middleware('auth_password_reset'),
-  authPasswordResetConfirm: new MemoryRateLimiter(10, 60 * 60 * 1000).middleware('auth_password_reset_confirm'),
-  authRefresh: new MemoryRateLimiter(20, 60 * 1000).middleware('auth_refresh'),
-  aiChat: new MemoryRateLimiter(10, 60 * 60 * 1000).middleware('ai_chat'),
+  authRegister: new MemoryRateLimiter(60, 60 * 60 * 1000).middleware('auth_register'),
+  authPasswordReset: new MemoryRateLimiter(5, 60 * 60 * 1000).middleware('auth_password_reset'),
+  authPasswordResetConfirm: new MemoryRateLimiter(15, 60 * 60 * 1000).middleware('auth_password_reset_confirm'),
+  authRefresh: new MemoryRateLimiter(30, 60 * 1000).middleware('auth_refresh'),
+  aiChat: new MemoryRateLimiter(60, 60 * 60 * 1000).middleware('ai_chat'),
 };
 

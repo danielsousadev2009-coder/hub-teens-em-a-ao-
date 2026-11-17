@@ -1,9 +1,14 @@
 import {
   ArrowUpRight,
   Check,
+  ChevronDown,
+  ChevronUp,
+  Key,
   LoaderCircle,
   MessageCircle,
   Send,
+  Settings,
+  Sparkles,
   UserPlus,
 } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
@@ -1167,8 +1172,12 @@ function MyPointsSummary() {
 }
 
 interface ProviderStatus {
-  id: 'gemini' | 'groq' | 'ollama'
+  id: 'gemini' | 'miniroot' | 'groq' | 'ollama'
+  name?: string
   configured: boolean
+  isDefault?: boolean
+  status?: string
+  statusMessage?: string
 }
 
 interface MentorMessage {
@@ -1185,7 +1194,32 @@ interface MentorConversation {
   messages: MentorMessage[]
 }
 
+interface AdminAiProvider {
+  id: string
+  name: string
+  isConfigured: boolean
+  maskedKey?: string | null
+  model: string
+  supportedModels: { id: string; name: string }[]
+  status: string
+  statusMessage?: string
+  baseUrl?: string
+}
+
+interface AdminAiConfig {
+  activeProvider: string
+  providers: {
+    gemini: AdminAiProvider
+    miniroot: AdminAiProvider
+    groq: AdminAiProvider
+    ollama: AdminAiProvider
+  }
+}
+
 function MentorPage() {
+  const { user } = useAuth()
+  const canManageAi = user?.role === 'teacher' || user?.role === 'administrator'
+
   const [providers, setProviders] = useState<ProviderStatus[]>([])
   const [notice, setNotice] = useState('')
   const [provider, setProvider] = useState<ProviderStatus['id'] | ''>('')
@@ -1196,14 +1230,32 @@ function MentorPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Admin panel state
+  const [showAdminPanel, setShowAdminPanel] = useState(false)
+  const [adminConfig, setAdminConfig] = useState<AdminAiConfig | null>(null)
+  const [geminiApiKeyInput, setGeminiApiKeyInput] = useState('')
+  const [geminiModelInput, setGeminiModelInput] = useState('gemini-2.0-flash')
+  const [testStatus, setTestStatus] = useState<{ success: boolean; message: string; latencyMs?: number } | null>(null)
+  const [isTesting, setIsTesting] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [adminSuccessMessage, setAdminSuccessMessage] = useState<string | null>(null)
+
   async function load() {
     try {
       const [providerData, conversationData] = await Promise.all([
-        apiRequest<{ providers: ProviderStatus[]; external_data_notice: string }>('/api/mentor/providers/'),
+        apiRequest<{ providers: ProviderStatus[]; activeProvider?: string; external_data_notice: string }>('/api/mentor/providers/'),
         apiRequest<unknown>('/api/mentor/conversations/'),
       ])
       setProviders(providerData.providers)
       setNotice(providerData.external_data_notice)
+
+      // Auto-select Gemini or first configured provider
+      const defaultProv = providerData.providers.find((p) => p.id === 'gemini' && p.configured) ||
+        providerData.providers.find((p) => p.configured)
+      if (defaultProv && !provider) {
+        setProvider(defaultProv.id)
+      }
+
       const saved = extractRows(conversationData) as unknown as MentorConversation[]
       setConversations(saved)
       if (active) setActive(saved.find((item) => item.id === active.id) ?? null)
@@ -1212,12 +1264,72 @@ function MentorPage() {
     }
   }
 
+  async function loadAdminConfig() {
+    if (!canManageAi) return
+    try {
+      const data = await apiRequest<AdminAiConfig>('/api/mentor/admin/config/')
+      setAdminConfig(data)
+      if (data.providers?.gemini?.model) {
+        setGeminiModelInput(data.providers.gemini.model)
+      }
+    } catch {
+      // Non-fatal if config endpoint is restricted
+    }
+  }
+
   useEffect(() => {
     void load()
-  }, [])
+    if (canManageAi) {
+      void loadAdminConfig()
+    }
+  }, [canManageAi])
 
   const selectedProvider = providers.find((item) => item.id === provider)
   const hasConfiguredProvider = providers.some((item) => item.configured)
+
+  async function handleTestGemini() {
+    setIsTesting(true)
+    setTestStatus(null)
+    try {
+      const res = await apiRequest<{ success: boolean; message: string; latencyMs?: number }>('/api/mentor/admin/test/', {
+        method: 'POST',
+        body: JSON.stringify({
+          provider: 'gemini',
+          apiKey: geminiApiKeyInput.trim() || undefined,
+          model: geminiModelInput,
+        }),
+      })
+      setTestStatus(res)
+    } catch (err) {
+      setTestStatus({ success: false, message: apiErrorMessage(err) })
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
+  async function handleSaveAiConfig() {
+    setIsSaving(true)
+    setAdminSuccessMessage(null)
+    setError(null)
+    try {
+      const updated = await apiRequest<AdminAiConfig>('/api/mentor/admin/config/', {
+        method: 'POST',
+        body: JSON.stringify({
+          activeProvider: 'gemini',
+          geminiApiKey: geminiApiKeyInput.trim() || undefined,
+          geminiModel: geminiModelInput,
+        }),
+      })
+      setAdminConfig(updated)
+      setGeminiApiKeyInput('') // Clear input after saving so secret is not lingering in field
+      setAdminSuccessMessage('Configuração do Google Gemini salva com sucesso! O provedor está ativo.')
+      await load()
+    } catch (err) {
+      setError(apiErrorMessage(err))
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   async function createConversation() {
     if (!provider) return
@@ -1274,61 +1386,258 @@ function MentorPage() {
   }
 
   return (
-    <section className="mx-auto max-w-3xl">
-      <header className="mb-6">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-indigo-600">Módulo do HUB</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">IA Mentora</h1>
-        <p className="mt-3 leading-6 text-slate-600">Converse com um provedor configurado pelo backend. As conversas ficam associadas à sua conta.</p>
+    <section className="mx-auto max-w-4xl space-y-6">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-indigo-600">HUB TEENS EM AÇÃO</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">IA Mentora</h1>
+          <p className="mt-2 text-slate-600">
+            Assistente inteligente com suporte ao Google Gemini como provedor principal temporário.
+          </p>
+        </div>
+        {canManageAi && (
+          <button
+            className="flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100"
+            onClick={() => {
+              setShowAdminPanel(!showAdminPanel)
+              if (!adminConfig) void loadAdminConfig()
+            }}
+            type="button"
+          >
+            <Settings className="size-4" />
+            <span>{showAdminPanel ? 'Ocultar Configurações de IA' : 'Configurar Provedores de IA'}</span>
+            {showAdminPanel ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          </button>
+        )}
       </header>
-      <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+
+      {/* Admin IA Management Panel */}
+      {canManageAi && showAdminPanel && (
+        <div className="rounded-2xl border border-indigo-200 bg-slate-50 p-6 shadow-sm">
+          <div className="flex items-center gap-2 text-indigo-900">
+            <Sparkles className="size-5 text-indigo-600" />
+            <h2 className="text-lg font-bold">Painel de Gerenciamento da Inteligência Artificial</h2>
+          </div>
+          <p className="mt-1 text-xs text-slate-600">
+            Configure a chave de API e o modelo do Google Gemini. A chave é gravada com segurança no backend e nunca é exposta.
+          </p>
+
+          {adminSuccessMessage && (
+            <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-800" role="status">
+              ✓ {adminSuccessMessage}
+            </p>
+          )}
+
+          <div className="mt-4 grid gap-6 md:grid-cols-2">
+            {/* Google Gemini Card */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-900">Google Gemini (Principal)</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${adminConfig?.providers?.gemini?.isConfigured ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                  {adminConfig?.providers?.gemini?.isConfigured ? 'Ativo e Configurado' : 'Aguardando Chave'}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Provedor principal ativo temporariamente.
+                {adminConfig?.providers?.gemini?.maskedKey && (
+                  <span className="ml-1 text-slate-700 font-mono font-medium">Chave atual: {adminConfig.providers.gemini.maskedKey}</span>
+                )}
+              </p>
+
+              <div className="mt-4 space-y-3">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Chave de API do Gemini (API Key)
+                  <div className="mt-1 relative">
+                    <Key className="absolute left-3 top-2.5 size-4 text-slate-400" />
+                    <input
+                      className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      onChange={(e) => setGeminiApiKeyInput(e.target.value)}
+                      placeholder={adminConfig?.providers?.gemini?.isConfigured ? 'Digite para alterar a chave atual…' : 'Cole sua chave do Google AI Studio…'}
+                      type="password"
+                      value={geminiApiKeyInput}
+                    />
+                  </div>
+                </label>
+
+                <label className="block text-xs font-semibold text-slate-700">
+                  Modelo do Gemini
+                  <select
+                    className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2 text-sm text-slate-900 outline-none focus:border-indigo-500"
+                    onChange={(e) => setGeminiModelInput(e.target.value)}
+                    value={geminiModelInput}
+                  >
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Recomendado - Mais rápido e moderno)</option>
+                    <option value="gemini-1.5-flash">Gemini 1.5 Flash (Equilibrado)</option>
+                    <option value="gemini-1.5-pro">Gemini 1.5 Pro (Maior profundidade de raciocínio)</option>
+                  </select>
+                </label>
+
+                {testStatus && (
+                  <div className={`rounded-lg p-2.5 text-xs font-medium ${testStatus.success ? 'border border-emerald-200 bg-emerald-50 text-emerald-800' : 'border border-rose-200 bg-rose-50 text-rose-800'}`}>
+                    {testStatus.message}
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    disabled={isTesting}
+                    onClick={() => void handleTestGemini()}
+                    type="button"
+                  >
+                    {isTesting ? 'Testando conexão…' : 'Testar Conexão'}
+                  </button>
+                  <button
+                    className="flex-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                    disabled={isSaving}
+                    onClick={() => void handleSaveAiConfig()}
+                    type="button"
+                  >
+                    {isSaving ? 'Salvando…' : 'Salvar no Backend'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* MiniRoot Information Card */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-900">MiniRoot AI</span>
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                  Em Manutenção / Diagnóstico
+                </span>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-slate-600">
+                A integração técnica com o <strong>MiniRoot</strong> está preservada no código do backend em estrutura modular, aguardando validação de endpoints e modelo para reparo futuro.
+              </p>
+              <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600 space-y-1">
+                <p>• <strong>Status:</strong> Preservado para reparo futuro</p>
+                <p>• <strong>Provedor ativo:</strong> Google Gemini</p>
+                <p>• <strong>Ação necessária:</strong> Definir documentação de endpoints oficiais e credenciais do servidor MiniRoot.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Student / User Advice Box */}
+      <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-950">
         {notice || 'Não compartilhe dados pessoais, informações sensíveis ou dados de outros estudantes. Provedores externos recebem as mensagens após consentimento.'}
       </p>
-      {error && <p className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800" role="alert">{error}</p>}
+
+      {error && <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800" role="alert">{error}</p>}
+
       {providers.length > 0 && !hasConfiguredProvider && (
-        <p className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700" role="status">
-          Nenhum provedor de IA está configurado. Gemini, Groq ou Ollama precisa ser configurado no backend para iniciar conversas.
-        </p>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900" role="status">
+          <p className="font-bold">Nenhum provedor de IA ativo no momento.</p>
+          <p className="mt-1 text-xs text-amber-800">
+            {canManageAi
+              ? 'Abra o painel "Configurar Provedores de IA" acima para inserir sua chave do Google Gemini e ativá-lo imediatamente.'
+              : 'O administrador da plataforma está configurando a chave do Google Gemini. Em instantes estará liberado.'}
+          </p>
+        </div>
       )}
-      <div className="grid gap-4 lg:grid-cols-[15rem_1fr]">
+
+      <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
         <aside className="space-y-3">
           <label className="block text-sm font-medium text-slate-700">
-            Provedor
-            <select className="mt-1.5 block w-full rounded-lg border border-slate-300 bg-white p-2.5" onChange={(event) => setProvider(event.target.value as ProviderStatus['id'])} value={provider}>
-              <option value="">Selecione</option>
-              {providers.map((item) => <option disabled={!item.configured} key={item.id} value={item.id}>{item.id}{item.configured ? '' : ' — não configurado'}</option>)}
+            Provedor de IA
+            <select
+              className="mt-1.5 block w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm outline-none focus:border-indigo-500"
+              onChange={(event) => setProvider(event.target.value as ProviderStatus['id'])}
+              value={provider}
+            >
+              <option value="">Selecione um provedor</option>
+              {providers.map((item) => {
+                const label = item.id === 'gemini'
+                  ? 'Google Gemini (Recomendado)'
+                  : item.id === 'miniroot'
+                  ? 'MiniRoot AI (Em manutenção)'
+                  : item.id === 'groq'
+                  ? 'Groq'
+                  : 'Ollama (Local)'
+                const disabled = !item.configured
+                return (
+                  <option disabled={disabled} key={item.id} value={item.id}>
+                    {label} {item.configured ? '✓' : '(não configurado)'}
+                  </option>
+                )
+              })}
             </select>
           </label>
-          <button className="w-full rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={!selectedProvider?.configured || busy} onClick={() => void createConversation()} type="button">
+
+          <button
+            className="w-full rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
+            disabled={!selectedProvider?.configured || busy}
+            onClick={() => void createConversation()}
+            type="button"
+          >
             Nova conversa
           </button>
+
           <ul className="space-y-2">
             {conversations.map((conversation) => (
               <li className="flex gap-1" key={conversation.id}>
-                <button className={`min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-left text-sm ${active?.id === conversation.id ? 'bg-indigo-100 text-indigo-950' : 'bg-white text-slate-700'}`} onClick={() => setActive(conversation)} type="button">{conversation.title}</button>
-                <button aria-label={`Excluir conversa ${conversation.title}`} className="rounded px-2 text-slate-500 hover:bg-rose-50 hover:text-rose-700" onClick={() => void deleteConversation(conversation.id)} type="button">×</button>
+                <button
+                  className={`min-w-0 flex-1 truncate rounded-lg px-3 py-2 text-left text-sm transition ${active?.id === conversation.id ? 'bg-indigo-100 font-medium text-indigo-950' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
+                  onClick={() => setActive(conversation)}
+                  type="button"
+                >
+                  {conversation.title}
+                </button>
+                <button
+                  aria-label={`Excluir conversa ${conversation.title}`}
+                  className="rounded px-2 text-slate-400 hover:bg-rose-50 hover:text-rose-700"
+                  onClick={() => void deleteConversation(conversation.id)}
+                  type="button"
+                >
+                  ×
+                </button>
               </li>
             ))}
           </ul>
         </aside>
-        <div className="min-h-72 rounded-2xl border border-slate-200 bg-white p-4">
+
+        <div className="min-h-80 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           {active ? (
             <>
-              <div aria-live="polite" className="max-h-96 space-y-3 overflow-y-auto">
-                {active.messages.map((item) => (
-                  <p className={`max-w-[90%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 ${item.role === 'user' ? 'ml-auto bg-indigo-600 text-white' : 'bg-slate-100 text-slate-800'}`} key={item.id}>{item.content}</p>
-                ))}
-                {!active.messages.length && <p className="py-12 text-center text-sm text-slate-500">Envie uma pergunta para começar.</p>}
+              <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2 text-xs text-slate-500">
+                <span>Provedor: <strong className="text-slate-800">{active.provider === 'gemini' ? 'Google Gemini' : active.provider}</strong></span>
+                <span>{active.messages.length} mensagens</span>
               </div>
+              <div aria-live="polite" className="max-h-96 space-y-3 overflow-y-auto pr-1">
+                {active.messages.map((item) => (
+                  <div className={`flex ${item.role === 'user' ? 'justify-end' : 'justify-start'}`} key={item.id}>
+                    <p className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 shadow-xs ${item.role === 'user' ? 'bg-indigo-600 text-white' : 'border border-slate-100 bg-slate-50 text-slate-800'}`}>
+                      {item.content}
+                    </p>
+                  </div>
+                ))}
+                {!active.messages.length && <p className="py-12 text-center text-sm text-slate-500">Envie sua dúvida para iniciar o aprendizado com a IA Mentora.</p>}
+              </div>
+
               <form className="mt-4 space-y-3 border-t border-slate-100 pt-4" onSubmit={(event) => void sendMessage(event)}>
                 {(active.provider === 'gemini' || active.provider === 'groq') && (
                   <label className="flex items-start gap-2 text-xs leading-5 text-slate-600">
                     <input checked={externalConsent} className="mt-1" onChange={(event) => setExternalConsent(event.target.checked)} type="checkbox" />
-                    Entendo que esta mensagem será enviada ao provedor externo selecionado. Não incluirei dados pessoais ou sensíveis.
+                    <span>Entendo que esta mensagem será enviada ao Google Gemini para processamento pedagógico seguro. Não incluirei dados pessoais ou sensíveis.</span>
                   </label>
                 )}
                 <div className="flex items-end gap-2">
-                  <textarea className="min-h-12 flex-1 resize-y rounded-xl border border-slate-300 p-3 text-sm" maxLength={6000} onChange={(event) => setMessage(event.target.value)} placeholder="Escreva sua pergunta sem incluir dados pessoais…" required value={message} />
-                  <button aria-label="Enviar mensagem" className="rounded-xl bg-indigo-600 p-3 text-white hover:bg-indigo-700 disabled:opacity-50" disabled={busy || !message.trim() || ((active.provider === 'gemini' || active.provider === 'groq') && !externalConsent)} type="submit">
+                  <textarea
+                    className="min-h-12 flex-1 resize-y rounded-xl border border-slate-300 p-3 text-sm outline-none focus:border-indigo-500"
+                    maxLength={6000}
+                    onChange={(event) => setMessage(event.target.value)}
+                    placeholder="Escreva sua pergunta de estudo ou dúvida sobre projetos…"
+                    required
+                    value={message}
+                  />
+                  <button
+                    aria-label="Enviar mensagem"
+                    className="rounded-xl bg-indigo-600 p-3 text-white hover:bg-indigo-700 disabled:opacity-50"
+                    disabled={busy || !message.trim() || ((active.provider === 'gemini' || active.provider === 'groq') && !externalConsent)}
+                    type="submit"
+                  >
                     {busy ? <LoaderCircle aria-hidden="true" className="size-5 animate-spin" /> : <Send aria-hidden="true" className="size-5" />}
                   </button>
                 </div>
@@ -1336,9 +1645,11 @@ function MentorPage() {
             </>
           ) : (
             <div className="flex min-h-64 flex-col items-center justify-center text-center">
-              <MessageCircle aria-hidden="true" className="size-9 text-indigo-400" />
-              <p className="mt-3 font-semibold text-slate-800">Suas conversas aparecem aqui</p>
-              <p className="mt-1 max-w-xs text-sm leading-6 text-slate-600">Nenhum provedor configurado? A integração só será ativada quando as variáveis do backend estiverem definidas.</p>
+              <MessageCircle aria-hidden="true" className="size-10 text-indigo-400" />
+              <p className="mt-3 font-semibold text-slate-800">Selecione ou inicie uma conversa</p>
+              <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">
+                A IA Mentora auxilia estudantes e professores no desenvolvimento de ideias, desafios e projetos sustentáveis.
+              </p>
             </div>
           )}
         </div>

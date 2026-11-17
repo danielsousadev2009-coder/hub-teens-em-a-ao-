@@ -29,16 +29,25 @@ export async function registerHandler(req, res, next) {
   try {
     const { username, email, first_name = '', last_name = '', password, password_confirm, role = 'student' } = req.body;
 
+    const rawUsername = typeof username === 'string' ? username.trim() : '';
+    const rawEmail = typeof email === 'string' ? email.trim() : '';
+    const rawFirstName = typeof first_name === 'string' ? first_name.trim() : '';
+    const rawLastName = typeof last_name === 'string' ? last_name.trim() : '';
+
     const allowedRoles = ['student', 'teacher'];
     const assignedRole = allowedRoles.includes(role) ? role : 'student';
 
     const errors = {};
 
-    if (!username || !/^[A-Za-z0-9._-]{3,30}$/.test(username)) {
-      errors.username = ['Use 3 a 30 letras, números, pontos, hífens ou sublinhados.'];
+    if (!rawUsername) {
+      errors.username = ['O nome de usuário é obrigatório.'];
+    } else if (/\s/.test(rawUsername)) {
+      errors.username = ['O nome de usuário não pode conter espaços. Use letras, números, hífens ou sublinhados (ex: joao_silva).'];
+    } else if (!/^[A-Za-z0-9._-]{3,30}$/.test(rawUsername)) {
+      errors.username = ['Use entre 3 e 30 letras, números, pontos, hífens ou sublinhados (sem acentos ou caracteres especiais).'];
     }
 
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
       errors.email = ['Informe um endereço de e-mail válido.'];
     }
 
@@ -54,16 +63,16 @@ export async function registerHandler(req, res, next) {
       throw new ValidationError('Os dados enviados são inválidos.', errors);
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = rawEmail.toLowerCase();
 
     // Check unique username and email
     const existing = await query(
       'SELECT id, username, email FROM accounts_user WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($2)',
-      [username, normalizedEmail]
+      [rawUsername, normalizedEmail]
     );
 
     for (const row of existing.rows) {
-      if (row.username.toLowerCase() === username.toLowerCase()) {
+      if (row.username.toLowerCase() === rawUsername.toLowerCase()) {
         errors.username = ['Este nome de usuário já está em uso.'];
       }
       if (row.email && row.email.toLowerCase() === normalizedEmail) {
@@ -84,7 +93,7 @@ export async function registerHandler(req, res, next) {
         is_superuser, is_staff, is_active, date_joined
       ) VALUES ($1, $2, $3, $4, $5, $6, false, false, true, $7)
       RETURNING id, username, email, first_name, last_name, role`,
-      [username, normalizedEmail, first_name, last_name, hashedPassword, assignedRole, now]
+      [rawUsername, normalizedEmail, rawFirstName, rawLastName, hashedPassword, assignedRole, now]
     );
 
     const user = result.rows[0];

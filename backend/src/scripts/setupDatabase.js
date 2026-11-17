@@ -13,6 +13,13 @@ const pool = new pg.Pool({
 });
 
 const schemaSql = `
+-- System Settings
+CREATE TABLE IF NOT EXISTS system_settings (
+  key VARCHAR(100) PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Accounts
 CREATE TABLE IF NOT EXISTS accounts_user (
   id BIGSERIAL PRIMARY KEY,
