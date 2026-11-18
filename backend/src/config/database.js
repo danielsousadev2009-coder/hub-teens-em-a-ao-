@@ -5,9 +5,19 @@ const { Pool } = pg;
 
 let poolConfig;
 
+const isLocalhost =
+  !config.database.url &&
+  (config.database.host === '127.0.0.1' || config.database.host === 'localhost');
+
+const sslOption =
+  config.database.sslMode !== 'disable' && !isLocalhost
+    ? { rejectUnauthorized: false }
+    : undefined;
+
 if (config.database.url) {
   poolConfig = {
     connectionString: config.database.url,
+    ssl: sslOption,
   };
 } else {
   poolConfig = {
@@ -16,13 +26,7 @@ if (config.database.url) {
     database: config.database.name,
     user: config.database.user,
     password: config.database.password,
-  };
-}
-
-// Configure SSL for PostgreSQL / Supabase
-if (config.database.sslMode !== 'disable' && config.database.host !== '127.0.0.1' && config.database.host !== 'localhost') {
-  poolConfig.ssl = {
-    rejectUnauthorized: false,
+    ssl: sslOption,
   };
 }
 
